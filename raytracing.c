@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 #include "math-toolkit.h"
 #include "primitives.h"
 #include "raytracing.h"
 #include "idx_stack.h"
-
+#include <immintrin.h>
 #define MAX_REFLECTION_BOUNCES	3
 #define MAX_DISTANCE 1000000000000.0
 #define MIN_DISTANCE 0.00001
@@ -17,6 +18,11 @@
 /* @param t t distance
  * @return 1 means hit, otherwise 0
  */
+/*
+typedef struct pthread_struct {
+	pthread_t p[THREAD_NUM];
+} pt;
+*/
 static int raySphereIntersection(const point3 ray_e,
                                  const point3 ray_d,
                                  const sphere *sph,
@@ -447,52 +453,69 @@ static unsigned int ray_color(const point3 e, double t,
                        object_color);
         }
     }
-
     protect_color_overflow(object_color);
     return 1;
 }
 
 /* @param background_color this is not ambient light */
-void raytracing(uint8_t *pixels, color background_color,
-                rectangular_node rectangulars, sphere_node spheres,
-                light_node lights, const viewpoint *view,
-                int width, int height)
+void raytracing( void * ray)
 {
+    rays * r = (rays *) ray;
     point3 u, v, w, d;
     color object_color = { 0.0, 0.0, 0.0 };
 
     /* calculate u, v, w */
-    calculateBasisVectors(u, v, w, view);
+    calculateBasisVectors(u, v, w, r->view);
 
     idx_stack stk;
 
     int factor = sqrt(SAMPLES);
-    for (int j = 0; j < height; j++) {
-        for (int i = 0; i < width; i++) {
-            double r = 0, g = 0, b = 0;
+    for (int j = r->tid; j < r->height; j = j + r->tnum) {
+        for (int i = 0; i < r->width; i++) {
+            double R = 0, G = 0, B = 0;
             /* MSAA */
             for (int s = 0; s < SAMPLES; s++) {
                 idx_stack_init(&stk);
                 rayConstruction(d, u, v, w,
                                 i * factor + s / factor,
                                 j * factor + s % factor,
-                                view,
-                                width * factor, height * factor);
-                if (ray_color(view->vrp, 0.0, d, &stk, rectangulars, spheres,
-                              lights, object_color,
+                                r->view,
+                                r->width * factor,r->height * factor);
+                if (ray_color(r->view->vrp, 0.0, d, &stk, r->rectangulars, r->spheres,
+                              r->lights, object_color,
                               MAX_REFLECTION_BOUNCES)) {
-                    r += object_color[0];
-                    g += object_color[1];
-                    b += object_color[2];
+                    R += object_color[0];
+                    G += object_color[1];
+                    B += object_color[2];
                 } else {
-                    r += background_color[0];
-                    g += background_color[1];
-                    b += background_color[2];
+                    R += r->background_color[0];
+                    G += r->background_color[1];
+                    B += r->background_color[2];
                 }
-                pixels[((i + (j * width)) * 3) + 0] = r * 255 / SAMPLES;
-                pixels[((i + (j * width)) * 3) + 1] = g * 255 / SAMPLES;
-                pixels[((i + (j * width)) * 3) + 2] = b * 255 / SAMPLES;
+                r->pixels[((i + (j * r->width)) * 3) + 0] = R * 255 / SAMPLES;
+                r->pixels[((i + (j * r->width)) * 3) + 1] = G * 255 / SAMPLES;
+                r->pixels[((i + (j * r->width)) * 3) + 2] = B * 255 / SAMPLES;
             }
         }
     }
+    pthread_exit(0);
+}
+
+rays *new_rays(uint8_t *pixels, double *background_color,
+               rectangular_node rectangulars, sphere_node spheres,
+               light_node lights, const viewpoint *view, int width,
+               int height, int tid, int tnum)
+{
+    rays *r = (rays*)malloc(sizeof(rays));
+    r->pixels = pixels;
+    r->background_color = background_color;
+    r->rectangulars = rectangulars;
+    r->spheres = spheres;
+    r->lights = lights;
+    r->view = view;
+    r->width = width;
+    r->height = height;
+    r->tid = tid;
+    r->tnum = tnum;
+    return r;
 }

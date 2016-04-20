@@ -4,9 +4,10 @@ all: $(EXEC)
 
 CC ?= gcc
 CFLAGS = \
-	-std=gnu99 -Wall -O0 -g
+	#-std=gnu99 -Wall -O0 -g
+	-std=gnu99 -O3 -g 
 LDFLAGS = \
-	-lm
+	-lm -pthread
 
 ifeq ($(strip $(PROFILE)),1)
 PROF_FLAGS = -pg
@@ -20,7 +21,7 @@ OBJS := \
 	main.o
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $< -mavx
 
 
 $(EXEC): $(OBJS)

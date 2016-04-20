@@ -46,11 +46,24 @@ int main()
     pixels = malloc(sizeof(unsigned char) * ROWS * COLS * 3);
     if (!pixels) exit(-1);
 
+    int threadnum;
+    printf("Thread num?");
+    scanf("%d", &threadnum);
     printf("# Rendering scene\n");
     /* do the ray tracing with the given geometry */
     clock_gettime(CLOCK_REALTIME, &start);
-    raytracing(pixels, background,
-               rectangulars, spheres, lights, &view, ROWS, COLS);
+
+    pthread_t *tid = (pthread_t *) malloc(threadnum * sizeof(pthread_t));
+
+    int k;
+    rays** pr = (rays **) malloc (threadnum * sizeof(rays *));
+    for(k=0; k<threadnum; k++) {
+        pr[k] = new_rays(pixels, background,rectangulars,spheres,lights,&view,ROWS,COLS,k,threadnum);
+        pthread_create(&tid[k],NULL,(void*) &raytracing,(void*)pr[k]);
+    }
+    for(k=0; k<threadnum; k++) {
+        pthread_join(tid[k],NULL);
+    }
     clock_gettime(CLOCK_REALTIME, &end);
     {
         FILE *outfile = fopen(OUT_FILENAME, "wb");
